@@ -448,7 +448,8 @@ bool UbloxNode::configureUblox() {
     if (!gps.setDeadReckonLimit(dr_limit_)) {
       std::stringstream ss;
       ss << "Failed to set dead reckoning limit: " << dr_limit_ << ".";
-      throw std::runtime_error(ss.str());
+      //throw std::runtime_error(ss.str());
+	ROS_ERROR("%s", ss.str());
     }
     if (set_dat_ && !gps.configure(cfg_dat_))
       throw std::runtime_error("Failed to set user-defined datum.");
@@ -520,12 +521,30 @@ void UbloxNode::initializeIo() {
   }
 }
 
-void UbloxNode::initialize() {
+void UbloxNode::initialize()
+{
+        boost::posix_time::seconds wait(5);
+    while (!gps.isInitialized())
+{
+  try
+  {
+
   // Params must be set before initializing IO
   getRosParams();
   initializeIo();
   // Must process Mon VER before setting firmware/hardware params
   processMonVer();
+
+  }
+  catch (std::exception& e)
+  {
+    ROS_FATAL("Error initializing u-blox: %s", e.what());
+    //return false;
+        gps.reset(wait);
+    ROS_WARN("Resetting u-blox...");
+  }
+}
+
   if(protocol_version_ <= 14) {
     if(nh->param("raw_data", false))
       components_.push_back(ComponentPtr(new RawDataProduct));
@@ -536,7 +555,44 @@ void UbloxNode::initialize() {
   // Do this last
   initializeRosDiagnostics();
 
-  if (configureUblox()) {
+bool configured = false;
+int counter = 0;
+
+    while (!gps.isConfigured())
+{
+  try
+  {
+
+	/// This code is broken on my Drotek M8N + Compass
+	/// After having roslaunched this node, if one tries
+	/// to shutdown and re-launch, the original code
+	/// will never be able to bring it up again as on
+	/// the first launch. On my Raspberry Pi 3, I need to
+	/// do a power cycle of the USB ports to manage to
+	/// have the Ublox stop spitting out garbage and
+	/// starting sending out NMEA sentences again.
+	///
+	/// echo 0 > /sys/devices/platform/soc/3f980000.usb/buspower
+	/// sleep 5
+	/// echo 1 > /sys/devices/platform/soc/3f980000.usb/buspower
+
+	if (counter > 10)
+		break;
+   configured = configureUblox();
+	counter++;
+
+  }
+  catch (std::exception& e)
+  {
+    ROS_FATAL("Error configuring u-blox: %s", e.what());
+    //return false;
+        gps.reset(wait);
+    ROS_WARN("Resetting u-blox...");
+  }
+}
+
+  //if (configureUblox()) {
+  if (configured) {
     ROS_INFO("U-Blox configured successfully.");
     // Subscribe to all U-Blox messages
     subscribe();

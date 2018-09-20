@@ -156,7 +156,8 @@ void Gps::initializeSerial(std::string port, unsigned int baudrate,
   }
   configured_ = configUart1(baudrate, uart_in, uart_out);
   if(!configured_ || current_baudrate.value() != baudrate) {
-    throw std::runtime_error("Could not configure serial baud rate");
+    //throw std::runtime_error("Could not configure serial baud rate");
+    ROS_ERROR("Could not configure serial baud rate, trying to go on anyway...");
   }
 }
 
